@@ -210,9 +210,13 @@ void loop() {
     Serial.printf("Temperature: %.2f °C\n", temperature);
     Serial.printf("Humidity: %.2f %%\n", humidity);
 
-    sendSensorMeasurement(sensorIdTemperature, temperature);
-    sendSensorMeasurement(sensorIdHumidity, humidity);
-  }
+    bool tempSent = sendSensorMeasurement(sensorIdTemperature, temperature);
+    bool humSent = sendSensorMeasurement(sensorIdHumidity, humidity);
 
-  delay(measurementIntervalInMS);
+    if (tempSent && humSent) {
+      delay(measurementIntervalInMS);
+    } else {
+      Serial.println("Failed to send measurements, skipping delay.");
+    }
+  }
 }
