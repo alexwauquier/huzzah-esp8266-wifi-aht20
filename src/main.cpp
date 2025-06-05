@@ -4,6 +4,8 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClientSecure.h>
 
+Adafruit_AHTX0 aht;
+
 const char* wifiSsid = "YOUR_WIFI_SSID";
 const char* wifiPassword = "YOUR_WIFI_PASSWORD";
 
@@ -15,13 +17,11 @@ const char* userPassword = "USER_PASSWORD";
 
 const int sensorIdTemperature = 1;
 const int sensorIdHumidity = 2;
-const int measurementIntervalInMS = 60000;
+const int measurementIntervalInMS = 1 * 60 * 1000;
 
 String jwtToken = "";
 
-Adafruit_AHTX0 aht;
-
-String readChunkedBody(WiFiClientSecure &client) {
+String readHttpBody(WiFiClientSecure &client) {
   String body = "";
   while (true) {
     String line = client.readStringUntil('\n');
@@ -85,7 +85,7 @@ bool authenticate() {
     if (line == "\r") break;
   }
 
-  String response = readChunkedBody(client);
+  String response = readHttpBody(client);
   JsonDocument resDoc;
   DeserializationError error = deserializeJson(resDoc, response);
 
@@ -143,7 +143,7 @@ bool sendSensorMeasurement(int sensorId, float value) {
       if (line == "\r") break;
     }
 
-    String response = readChunkedBody(client);
+    String response = readHttpBody(client);
     JsonDocument resDoc;
     DeserializationError error = deserializeJson(resDoc, response);
 
@@ -154,14 +154,8 @@ bool sendSensorMeasurement(int sensorId, float value) {
       return false;
     }
 
-    if (resDoc["success"] && sensorId == sensorIdTemperature) {
-      Serial.println("Temperature successfully sent!");
-      client.stop();
-      return true;
-    }
-
-    if (resDoc["success"] && sensorId == sensorIdHumidity) {
-      Serial.println("Humidity sent with success!");
+    if (resDoc["success"]) {
+      Serial.printf("Measurement sent for sensor %d: %.2f\n", sensorId, value);
       client.stop();
       return true;
     }
@@ -204,19 +198,21 @@ void setup() {
 }
 
 void loop() {
-  sensors_event_t humidity, temp;
-  aht.getEvent(&humidity, &temp);
+  sensors_event_t hum, temp;
+  aht.getEvent(&hum, &temp);
 
   float temperature = temp.temperature;
-  float hum = humidity.relative_humidity;
+  float humidity = hum.relative_humidity;
 
-  Serial.printf("Temperature: %.2f °C\n", temperature);
-  Serial.printf("Humidity: %.2f %%\n", hum);
+  if (isnan(temperature) || isnan(humidity)) {
+    Serial.println("Failed to read from AHT sensor!");
+  } else {
+    Serial.printf("Temperature: %.2f °C\n", temperature);
+    Serial.printf("Humidity: %.2f %%\n", humidity);
 
-  sendSensorMeasurement(sensorIdTemperature, temperature);
-  sendSensorMeasurement(sensorIdHumidity, hum);
-
-  Serial.print("\n");
+    sendSensorMeasurement(sensorIdTemperature, temperature);
+    sendSensorMeasurement(sensorIdHumidity, humidity);
+  }
 
   delay(measurementIntervalInMS);
 }
